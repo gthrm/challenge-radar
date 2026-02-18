@@ -8,6 +8,7 @@ export type Challenge = {
   remindersOn: boolean
   entries: Record<string, boolean>
   lastNotified?: string // YYYY-MM-DD
+  updatedAt?: string // ISO string
 }
 
 export type FormState = {
@@ -34,4 +35,9 @@ export type Progress = {
   expected: number
   percent: number
   status: 'completed' | 'behind' | 'on-track'
+}
+
+export type MergeConflict = {
+  local: Challenge[]
+  remote: Challenge[]
 }

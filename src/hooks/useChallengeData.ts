@@ -3,6 +3,7 @@ import type {
   Challenge,
   Filter,
   FormState,
+  MergeConflict,
   Progress,
   Stats,
 } from "../types/challenge";
@@ -72,20 +73,7 @@ const loadChallenges = (): Challenge[] => {
       console.warn("Unable to parse cached challenges", error);
     }
   }
-
-  const fallbackStart = todayKey();
-  return [
-    {
-      id: makeId(),
-      title: "30-Day Photo Sprint",
-      description: "Capture one photo a day that matches the mood of your day.",
-      startDate: fallbackStart,
-      totalDays: 30,
-      reminderTime: "09:00",
-      remindersOn: true,
-      entries: {},
-    },
-  ];
+  return [];
 };
 
 const notificationsGranted = () =>
@@ -103,6 +91,7 @@ export const useChallengeData = () => {
   const [session, setSession] = useState<null | { user: { id: string; email?: string } }>(null);
   const [syncing, setSyncing] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
+  const [conflict, setConflict] = useState<MergeConflict | null>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(challenges));
@@ -249,6 +238,7 @@ export const useChallengeData = () => {
       reminderTime: form.reminderTime,
       remindersOn: form.remindersOn,
       entries: {},
+      updatedAt: new Date().toISOString(),
     };
 
     setChallenges((prev) => [newChallenge, ...prev]);
@@ -267,7 +257,7 @@ export const useChallengeData = () => {
 
     if (session) {
       const target = challenges.find((c) => c.id === id);
-      if (target) upsertChallenge({ ...target, ...updates }, session.user.id);
+      if (target) upsertChallenge({ ...target, ...updates, updatedAt: new Date().toISOString() }, session.user.id);
     }
   };
 
@@ -285,7 +275,7 @@ export const useChallengeData = () => {
           ...challenge.entries,
           [today]: !challenge.entries[today],
         };
-        return { ...challenge, entries };
+        return { ...challenge, entries, updatedAt: new Date().toISOString() };
       }),
     );
 
@@ -296,7 +286,7 @@ export const useChallengeData = () => {
           ...target.entries,
           [today]: !target.entries[today],
         };
-        upsertChallenge({ ...target, entries }, session.user.id);
+        upsertChallenge({ ...target, entries, updatedAt: new Date().toISOString() }, session.user.id);
       }
     }
   };
@@ -305,7 +295,7 @@ export const useChallengeData = () => {
     setChallenges((prev) =>
       prev.map((challenge) =>
         challenge.id === id
-          ? { ...challenge, remindersOn: !challenge.remindersOn }
+          ? { ...challenge, remindersOn: !challenge.remindersOn, updatedAt: new Date().toISOString() }
           : challenge,
       ),
     );
@@ -316,6 +306,7 @@ export const useChallengeData = () => {
         upsertChallenge({
           ...target,
           remindersOn: !target.remindersOn,
+          updatedAt: new Date().toISOString(),
         }, session.user.id);
       }
     }
@@ -332,25 +323,40 @@ export const useChallengeData = () => {
     setMessage(granted ? "Reminders enabled." : "Notifications were blocked.");
   };
 
-  const hydrateFromRemote = async () => {
-    if (!session) return;
+  const pushLocalThenHydrate = async (userId: string) => {
+    if (!supabaseAvailable) return;
     setSyncing(true);
+
     const remote = await fetchRemoteChallenges();
+    const local = loadChallenges();
+
+    if (remote.length > 0 && local.length > 0) {
+      setConflict({ local, remote });
+      setSyncing(false);
+      setMessage("Found data in cloud and on this device. Choose how to merge.");
+      return;
+    }
+
     if (remote.length > 0) {
       setChallenges(remote);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(remote));
       setMessage("Synced from cloud.");
+      setSyncing(false);
+      return;
     }
-    setSyncing(false);
-  };
 
-  const pushLocalThenHydrate = async (userId: string) => {
-    // push all local challenges to Supabase, then hydrate from remote snapshot
-    if (!supabaseAvailable) return;
-    const local = loadChallenges();
-    setSyncing(true);
-    await Promise.all(local.map((c) => upsertChallenge(c, userId)));
-    await hydrateFromRemote();
+    if (local.length > 0) {
+      await Promise.all(local.map((c) => upsertChallenge(c, userId)));
+      const refreshed = await fetchRemoteChallenges();
+      if (refreshed.length > 0) {
+        setChallenges(refreshed);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(refreshed));
+        setMessage("Uploaded local data to cloud.");
+      }
+      setSyncing(false);
+      return;
+    }
+
     setSyncing(false);
   };
 
@@ -385,6 +391,47 @@ export const useChallengeData = () => {
     setAuthBusy(false);
   };
 
+  const mergeChallenges = (local: Challenge[], remote: Challenge[]) => {
+    const map = new Map<string, Challenge>();
+    remote.forEach((c) => map.set(c.id, c));
+    local.forEach((c) => {
+      const existing = map.get(c.id);
+      if (!existing) {
+        map.set(c.id, c);
+        return;
+      }
+      const existingTime = existing.updatedAt ? Date.parse(existing.updatedAt) : 0;
+      const localTime = c.updatedAt ? Date.parse(c.updatedAt) : 0;
+      if (localTime > existingTime) {
+        map.set(c.id, c);
+      }
+    });
+    return Array.from(map.values());
+  };
+
+  const resolveConflict = async (strategy: "remote" | "local" | "merge") => {
+    if (!conflict || !session) return;
+    setSyncing(true);
+
+    let chosen: Challenge[] = [];
+    if (strategy === "remote") chosen = conflict.remote;
+    if (strategy === "local") chosen = conflict.local;
+    if (strategy === "merge") chosen = mergeChallenges(conflict.local, conflict.remote);
+
+    setChallenges(chosen);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(chosen));
+    await Promise.all(chosen.map((c) => upsertChallenge(c, session.user.id)));
+    setConflict(null);
+    setMessage(
+      strategy === "merge"
+        ? "Merged local and cloud data."
+        : strategy === "remote"
+          ? "Using cloud data."
+          : "Uploaded this device data to cloud.",
+    );
+    setSyncing(false);
+  };
+
   const downloadCalendar = (challenge: Challenge) => {
     const blob = new Blob([buildIcs(challenge)], {
       type: "text/calendar;charset=utf-8",
@@ -416,6 +463,7 @@ export const useChallengeData = () => {
       userEmail,
       syncing,
       authBusy,
+      conflict,
     },
     actions: {
       setForm,
@@ -432,6 +480,7 @@ export const useChallengeData = () => {
       signInWithEmail,
       signOut,
       setAuthBusy,
+      resolveConflict,
     },
     helpers: {
       templates: defaultTemplates,

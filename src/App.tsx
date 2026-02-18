@@ -25,6 +25,7 @@ function App() {
       userEmail,
       syncing,
       authBusy,
+      conflict,
     },
     actions: {
       setForm,
@@ -40,6 +41,7 @@ function App() {
       setUserEmail,
       signInWithEmail,
       signOut,
+      resolveConflict,
     },
     helpers: { templates },
   } = useChallengeData();
@@ -162,6 +164,28 @@ function App() {
             <span className="pill stat">Finish {stats.completionRate}%</span>
           </div>
         </div>
+
+        {conflict && (
+          <div className="conflict-banner">
+            <div>
+              <p className="eyebrow small">Cloud vs Local</p>
+              <p className="tiny">
+                We found data on this device and in the cloud. Choose how to resolve sync.
+              </p>
+            </div>
+            <div className="chip-row">
+              <button className="ghost" onClick={() => resolveConflict("remote")}>
+                Use cloud
+              </button>
+              <button className="ghost" onClick={() => resolveConflict("local")}>
+                Use this device
+              </button>
+              <button className="primary" onClick={() => resolveConflict("merge")}>
+                Merge newest
+              </button>
+            </div>
+          </div>
+        )}
 
         <FilterChips
           filter={filter}

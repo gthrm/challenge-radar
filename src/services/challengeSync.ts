@@ -38,6 +38,7 @@ const serialize = (challenge: Challenge, userId: string) => ({
   reminders_on: challenge.remindersOn,
   entries: challenge.entries,
   last_notified: challenge.lastNotified ?? null,
+  updated_at: challenge.updatedAt ?? new Date().toISOString(),
 })
 
 const deserialize = (row: any): Challenge => ({
@@ -50,4 +51,5 @@ const deserialize = (row: any): Challenge => ({
   remindersOn: row.reminders_on,
   entries: row.entries ?? {},
   lastNotified: row.last_notified ?? undefined,
+  updatedAt: row.updated_at ?? undefined,
 })
