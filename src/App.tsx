@@ -135,6 +135,7 @@ function App() {
                     placeholder="email for sync"
                     value={userEmail}
                     onChange={(e) => setUserEmail(e.target.value)}
+                    autoComplete="email"
                     required
                   />
                   <button className="primary" type="submit" disabled={authBusy}>
