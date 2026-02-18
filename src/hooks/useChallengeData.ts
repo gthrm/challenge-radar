@@ -364,7 +364,7 @@ export const useChallengeData = () => {
     setUserEmail(email);
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.href },
+      options: { emailRedirectTo: window.location.origin },
     });
     if (error) {
       const friendly =
@@ -373,7 +373,7 @@ export const useChallengeData = () => {
           : error.message;
       setMessage(friendly);
     } else {
-      setMessage("Check your email to finish sign-in.");
+      setMessage("Magic link sent. Check your email to finish sign-in.");
     }
     setAuthBusy(false);
   };

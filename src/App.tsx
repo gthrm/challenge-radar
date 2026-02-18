@@ -116,6 +116,9 @@ function App() {
                     Sign out
                   </button>
                   <span className="hint">{syncing ? "Syncing…" : "Synced"}</span>
+                  {supabaseAvailable && !syncing && message && (
+                    <span className="hint">{message}</span>
+                  )}
                 </>
               ) : (
                 <form
@@ -137,6 +140,7 @@ function App() {
                   <button className="primary" type="submit" disabled={authBusy}>
                     {authBusy ? "Sending..." : "Magic link"}
                   </button>
+                  {message && <span className="hint">{message}</span>}
                 </form>
               )}
             </div>
