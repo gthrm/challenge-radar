@@ -3,7 +3,6 @@ import type {
   Challenge,
   Filter,
   FormState,
-  MergeConflict,
   Progress,
   Stats,
 } from "../types/challenge";
@@ -91,7 +90,6 @@ export const useChallengeData = () => {
   const [session, setSession] = useState<null | { user: { id: string; email?: string } }>(null);
   const [syncing, setSyncing] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
-  const [conflict, setConflict] = useState<MergeConflict | null>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(challenges));
@@ -330,9 +328,13 @@ export const useChallengeData = () => {
     const remote = await fetchRemoteChallenges();
     const local = loadChallenges();
 
+    // auto-merge: take newer per challenge by updatedAt
     if (remote.length > 0 && local.length > 0) {
-      setConflict({ local, remote });
-      setMessage("Found data in cloud and on this device. Choose how to merge.");
+      const merged = mergeChallenges(local, remote);
+      setChallenges(merged);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      await Promise.all(merged.map((c) => upsertChallenge(c, userId)));
+      setMessage("Merged local and cloud data.");
       setSyncing(false);
       return;
     }
@@ -410,29 +412,6 @@ export const useChallengeData = () => {
     return Array.from(map.values());
   };
 
-  const resolveConflict = async (strategy: "remote" | "local" | "merge") => {
-    if (!conflict || !session) return;
-    setSyncing(true);
-
-    let chosen: Challenge[] = [];
-    if (strategy === "remote") chosen = conflict.remote;
-    if (strategy === "local") chosen = conflict.local;
-    if (strategy === "merge") chosen = mergeChallenges(conflict.local, conflict.remote);
-
-    setChallenges(chosen);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(chosen));
-    await Promise.all(chosen.map((c) => upsertChallenge(c, session.user.id)));
-    setConflict(null);
-    setMessage(
-      strategy === "merge"
-        ? "Merged local and cloud data."
-        : strategy === "remote"
-          ? "Using cloud data."
-          : "Uploaded this device data to cloud.",
-    );
-    setSyncing(false);
-  };
-
   const downloadCalendar = (challenge: Challenge) => {
     const blob = new Blob([buildIcs(challenge)], {
       type: "text/calendar;charset=utf-8",
@@ -464,7 +443,6 @@ export const useChallengeData = () => {
       userEmail,
       syncing,
       authBusy,
-      conflict,
     },
     actions: {
       setForm,
@@ -481,7 +459,6 @@ export const useChallengeData = () => {
       signInWithEmail,
       signOut,
       setAuthBusy,
-      resolveConflict,
     },
     helpers: {
       templates: defaultTemplates,

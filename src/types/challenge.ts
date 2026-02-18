@@ -36,8 +36,3 @@ export type Progress = {
   percent: number
   status: 'completed' | 'behind' | 'on-track'
 }
-
-export type MergeConflict = {
-  local: Challenge[]
-  remote: Challenge[]
-}
