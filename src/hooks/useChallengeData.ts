@@ -332,8 +332,8 @@ export const useChallengeData = () => {
 
     if (remote.length > 0 && local.length > 0) {
       setConflict({ local, remote });
-      setSyncing(false);
       setMessage("Found data in cloud and on this device. Choose how to merge.");
+      setSyncing(false);
       return;
     }
 
@@ -357,6 +357,7 @@ export const useChallengeData = () => {
       return;
     }
 
+    setMessage("");
     setSyncing(false);
   };
 

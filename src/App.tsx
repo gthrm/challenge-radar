@@ -118,7 +118,7 @@ function App() {
                     Sign out
                   </button>
                   <span className="hint">{syncing ? "Syncing…" : "Synced"}</span>
-                  {supabaseAvailable && !syncing && message && (
+                  {supabaseAvailable && !syncing && message && !conflict && (
                     <span className="hint">{message}</span>
                   )}
                 </>
